@@ -1,0 +1,399 @@
+      REAL FUNCTION GETVIS(AOD, ISEASN)
+!______________________________________________________________________|
+!                                                                      |
+!     Copyright 2009 Spectral Sciences, Inc.                           |
+!                                                                      |
+!     Neither Spectral Sciences, Inc. nor its employees makes any      |
+!     warranty, express or implied, regarding the uses, accuracy,      |
+!     or completeness of this software.                                |
+!______________________________________________________________________|
+
+!     GETVIS RETURNS SURFACE METEOROLOGICAL RANGE (VISIBILITY) FOR THE
+!     INPUT AEROSOL MODEL AND VERTICAL COLUMN 550 NM OPTICAL DEPTH.
+      IMPLICIT NONE
+
+!     PARAMETERS:
+!       VIS1     FIRST  VISIBILITY GRID POINT [ 5KM].
+!       VIS2     SECOND VISIBILITY GRID POINT [10KM].
+!       VIS3     THIRD  VISIBILITY GRID POINT [23KM].
+!       VIS4     MAXIMUM VISIBILITY (AEROSOL DENSITY<0 IF HIGHER) [KM].
+!       OFF0S    UNDER 6KM SUMMER 550NM DEPTH OFFSET FOR      VIS<VIS1.
+!       OFF0W    UNDER 6KM WINTER 550NM DEPTH OFFSET FOR      VIS<VIS1.
+!       OFF1S    UNDER 6KM SUMMER 550NM DEPTH OFFSET FOR VIS1<VIS<VIS2.
+!       OFF1W    UNDER 6KM WINTER 550NM DEPTH OFFSET FOR VIS1<VIS<VIS2.
+!       OFF2S    UNDER 6KM SUMMER 550NM DEPTH OFFSET FOR VIS2<VIS<VIS3.
+!       OFF2W    UNDER 6KM WINTER 550NM DEPTH OFFSET FOR VIS2<VIS<VIS3.
+!       OFF3S    UNDER 6KM SUMMER 550NM DEPTH OFFSET FOR VIS3<VIS.
+!       OFF3W    UNDER 6KM WINTER 550NM DEPTH OFFSET FOR VIS3<VIS.
+!       HCOEF0   HALF UNDER 6KM 550NM DEPTH COEF FOR VIS<VIS1 [KM].
+!       COEF1    UNDER 6KM 550NM DEPTH COEF FOR VIS1<VIS<VIS2 [KM].
+!       COEF2    UNDER 6KM 550NM DEPTH COEF FOR VIS2<VIS<VIS3 [KM].
+!       COEF3S   UNDER 6KM SUMMER 550NM DEPTH COEF FOR VIS3<VIS [KM].
+!       COEF3W   UNDER 6KM WINTER 550NM DEPTH COEF FOR VIS3<VIS [KM].
+!       BCKSUM   ABOVE 6KM SUMMER BACKGROUND 550NM VERTICAL DEPTH.
+!       MODSUM   ABOVE 6KM SUMMER MODERATE   550NM VERTICAL DEPTH.
+!       HISUM    ABOVE 6KM SUMMER HIGH       550NM VERTICAL DEPTH.
+!       XTRSUM   ABOVE 6KM SUMMER EXTREME    550NM VERTICAL DEPTH.
+!       BCKWIN   ABOVE 6KM WINTER BACKGROUND 550NM VERTICAL DEPTH.
+!       MODWIN   ABOVE 6KM WINTER MODERATE   550NM VERTICAL DEPTH.
+!       HIWIN    ABOVE 6KM WINTER HIGH       550NM VERTICAL DEPTH.
+!       XTRWIN   ABOVE 6KM WINTER EXTREME    550NM VERTICAL DEPTH.
+      REAL VIS1,VIS2,VIS3,OFF0S,OFF0W,OFF1S,OFF1W,                      &
+     &  OFF2S,OFF2W,OFF3S,OFF3W,HCOEF0,COEF1,COEF2,COEF3S,COEF3W,       &
+     &  BCKSUM,MODSUM,HISUM,XTRSUM,BCKWIN,MODWIN,HIWIN,XTRWIN,          &
+     &  VIS4,U6SUM4,U6WIN4,U6SUM3,U6WIN3,U6SUM2,U6WIN2,U6SUM1,U6WIN1
+      PARAMETER(  OFF0S=.190806, OFF0W=.170150, HCOEF0=2.390760,        &
+     &  VIS1= 5., OFF1S=.147658, OFF1W=.127002, COEF1=4.997261,         &
+     &  VIS2=10., OFF2S=.035200, OFF2W=.014544, COEF2=6.121839,         &
+     &  VIS3=23., OFF3S=-.002909594,            COEF3S=6.9983467,       &
+     &            OFF3W=-.010791,               COEF3W=6.704554,        &
+     &  BCKSUM=.02337204,MODSUM=.044187,HISUM=.111495,XTRSUM=.280859,   &
+     &  BCKWIN=.014820,MODWIN=.034590,HIWIN=.082906,XTRWIN=.266033,     &
+     &  VIS4=323.5775,U6SUM4=OFF3S+COEF3S/VIS4,U6WIN4=OFF3W+COEF3W/VIS4,&
+     &                U6SUM3=OFF3S+COEF3S/VIS3,U6WIN3=OFF3W+COEF3W/VIS3,&
+     &                U6SUM2=OFF2S+COEF2 /VIS2,U6WIN2=OFF2W+COEF2 /VIS2,&
+     &                U6SUM1=OFF1S+COEF1 /VIS1,U6WIN1=OFF1W+COEF1 /VIS1)
+ !     INCLUDE 'PARAMS.h'
+
+!     INPUT ARGUMENTS:
+!       AOD      550 NM VERTICAL COLUMN AEROSOL OPTICAL DEPTH.
+!       GNDALT   GROUND ALTITUDE (<6.) [KM].
+!       ISEASN   =1 FOR SPRING/SUMMER.
+!       VOLCAN   VOLCANIC AEROSOL MODEL NUMBER.
+      REAL AOD
+      DOUBLE PRECISION GNDALT
+      INTEGER ISEASN
+      !INTEGER VOLCAN
+
+!     COMMONS:
+!      INCLUDE 'IFIL.h'
+
+!     LOCAL VARIABLES:
+!       UNDER6   GROUND TO 6KM 550NM VERTICAL AEROSOL OPTICAL DEPTH.
+!       VIS0     LOWER BOUND OF VISIBILITY [KM].
+      REAL UNDER6,U6SCAL,VIS0
+
+!     FUNCTIONS:
+!       BI6VIS   USES BISECTION METHOD TO FIND VISIBILITY MATCHING AOD.
+      REAL BI6VIS
+
+!     DATA:
+!       VOLSUM   SUMMER/SPRING VOLCANIC VERTICAL AEROSOL OPTICAL DEPTH.
+!       VOLWIN   WINTER/FALL VOLCANIC VERTICAL AEROSOL OPTICAL DEPTH.
+      REAL VOLSUM(0:8),VOLWIN(0:8)
+      DATA VOLSUM,VOLWIN/                                               &
+     &  BCKSUM,BCKSUM,MODSUM,HISUM,HISUM,MODSUM,MODSUM,HISUM,XTRSUM,    &
+     &  BCKWIN,BCKWIN,MODWIN,HIWIN,HIWIN,MODWIN,MODWIN,HIWIN,XTRWIN/
+      GNDALT=0.0
+      
+!     BRANCH BASED ON SEASON FOR HIGHER ALTITUDE AEROSOLS:
+      IF(ISEASN.EQ.1)THEN
+          UNDER6=AOD-BCKSUM
+          U6SCAL=6*UNDER6/(6-GNDALT)
+
+          IF(U6SCAL.GT.U6SUM2)THEN
+              IF(U6SCAL.GT.U6SUM1)THEN
+                  VIS0=HCOEF0/(U6SCAL-OFF0S)
+                  GETVIS=BI6VIS(4,GNDALT,ISEASN,UNDER6,VIS0,VIS1)
+              ELSE
+                  GETVIS=BI6VIS(3,GNDALT,ISEASN,UNDER6,VIS1,VIS2)
+              ENDIF
+          ELSEIF(U6SCAL.GT.U6SUM3)THEN
+              GETVIS=BI6VIS(2,GNDALT,ISEASN,UNDER6,VIS2,VIS3)
+          ELSEIF(U6SCAL.GE.U6SUM4)THEN
+              GETVIS=BI6VIS(1,GNDALT,ISEASN,UNDER6,VIS3,VIS4)
+
+          ELSE
+              !PRINT*,'AOD too small?'
+              !CALL WWARNF(IPR)
+              GETVIS=VIS4
+          ENDIF
+      ELSE
+
+!         FINDING BOUNDING VISIBILITIES FOR WINTER/FALL:
+          UNDER6=AOD-BCKWIN
+          U6SCAL=6*UNDER6/(6-GNDALT)
+          IF(U6SCAL.GT.U6WIN2)THEN
+              IF(U6SCAL.GT.U6WIN1)THEN
+                  VIS0=HCOEF0/(U6SCAL-OFF0W)
+                  GETVIS=BI6VIS(4,GNDALT,ISEASN,UNDER6,VIS0,VIS1)
+              ELSE
+                  GETVIS=BI6VIS(3,GNDALT,ISEASN,UNDER6,VIS1,VIS2)
+              ENDIF
+          ELSEIF(U6SCAL.GT.U6WIN3)THEN
+              GETVIS=BI6VIS(2,GNDALT,ISEASN,UNDER6,VIS2,VIS3)
+          ELSEIF(U6SCAL.GE.U6WIN4)THEN
+              GETVIS=BI6VIS(1,GNDALT,ISEASN,UNDER6,VIS3,VIS4)
+          ELSE
+              !PRINT*,'AOD too small?'        
+              !CALL WWARNF(IPR)
+              GETVIS=VIS4
+          ENDIF
+      ENDIF
+      RETURN
+      END FUNCTION GETVIS
+
+
+
+
+
+
+      REAL FUNCTION BI6VIS(IVIS,GNDALT,ISEASN,UNDER6,VISMIN,VISMAX)
+!______________________________________________________________________|
+!                                                                      |
+!     Copyright 2009 Spectral Sciences, Inc.                           |
+!                                                                      |
+!     Neither Spectral Sciences, Inc. nor its employees makes any      |
+!     warranty, express or implied, regarding the uses, accuracy,      |
+!     or completeness of this software.                                |
+!______________________________________________________________________|
+
+!     BI6VIS USES THE BISECTION METHOD TO DETERMINE THE VISIBILITY
+!     BETWEEN VISMIN AND VISMAX THAT PRODUCES A GROUND TO 6KM VERTICAL
+!     550nm AEROSOL OPTICAL DEPTH (AOD) EQUAL TO THE "UNDER6" VALUE.
+      IMPLICIT NONE
+
+!     PARAMETERS:
+!       VISTOL   VISIBILITY TOLERANCE [KM].
+      REAL VISTOL
+      PARAMETER(VISTOL=.0001)
+
+!     INPUT ARGUMENTS:
+!       IVIS     VISIBILITY RANGE INDEX (1 FOR VIS>23KM; 4 FOR VIS<5KM).
+!       GNDALT   GROUND ALTITUDE (<6.) [KM].
+!       ISEASN   TRUE FOR SPRING/SUMMER.
+!       UNDER6   GROUND TO 6KM 550NM VERTICAL AEROSOL OPTICAL DEPTH.
+!       VISMIN   VISIBILITY (SURFACE METEOROLOGICAL RANGE) MINIMUM [KM].
+!       VISMAX   VISIBILITY (SURFACE METEOROLOGICAL RANGE) MAXIMUM [KM].
+      INTEGER IVIS
+      DOUBLE PRECISION GNDALT
+      REAL UNDER6,VISMIN,VISMAX
+      INTEGER ISEASN
+
+!     LOCAL VARIABLES:
+!       VISMN    CURRENT VISIBILITY MINIMUM [KM].
+!       VISMX    CURRENT VISIBILITY MAXIMUM [KM].
+!       U6       UNDER 6KM 550NM AEROSOL OPTICAL DEPTH BISECTION VALUE.
+      REAL VISMN,VISMX,U6
+
+!     FUNCTIONS:
+!       GTAOD6   RETURNS GROUND TO 6KM 550NM AEROSOL OPTICAL DEPTH.
+      REAL GTAOD6
+
+!     SET LOCAL VISIBILITY EXTREMA:
+      VISMN=VISMIN
+      VISMX=VISMAX
+
+!     TOLERANCE TEST:
+!   10 CONTINUE
+!      BI6VIS=(VISMN+VISMX)/2
+!      IF(VISMX-VISMN.LT.VISTOL)RETURN
+
+!     BISECTION VALUE FOR UNDER 6km 550nm AEROSOL OPTICAL DEPTH:
+!      U6=GTAOD6(IVIS,BI6VIS,GNDALT,SUMMER)
+
+!     COMPARE U6 TO UNDER6, BRANCH ACCORDING & RETURN TO TOLERANCE TEST:
+!      IF(U6.GT.UNDER6)THEN
+!          VISMN=BI6VIS
+!      ELSE
+!          VISMX=BI6VIS
+!      ENDIF
+!      GOTO 10
+
+	DO WHILE (VISMX-VISMN.GE.VISTOL)
+	   BI6VIS=(VISMN+VISMX)/2
+!          BISECTION VALUE FOR UNDER 6km 550nm AEROSOL OPTICAL DEPTH:
+           U6=GTAOD6(IVIS,BI6VIS,GNDALT,ISEASN)
+	   IF (U6.GT.UNDER6) THEN
+		VISMN=BI6VIS
+	   ELSE
+		VISMX=BI6VIS
+	   ENDIF
+	ENDDO
+
+
+
+      END FUNCTION BI6VIS
+
+
+
+
+
+      REAL FUNCTION GTAOD6(IVIS,VIS,GNDALT,ISEASN)
+!______________________________________________________________________|
+!                                                                      |
+!     Copyright 2009 Spectral Sciences, Inc.                           |
+!                                                                      |
+!     Neither Spectral Sciences, Inc. nor its employees makes any      |
+!     warranty, express or implied, regarding the uses, accuracy,      |
+!     or completeness of this software.                                |
+!______________________________________________________________________|
+
+!     GTAOD6 RETURNS THE VERTICAL AEROSOL OPTICAL DEPTH FROM THE
+!     GROUND TO 6KM ALTITUDE FOR A GIVEN VISIBILITY AND SEASON.
+      IMPLICIT NONE
+
+!     INPUT ARGUMENTS:
+!       IVIS     VISIBILITY RANGE INDEX (1 FOR VIS>23KM; 4 FOR VIS<5KM).
+!       VIS      VISIBILITY (SURFACE METEOROLOGICAL RANGE) [KM].
+!       GNDALT   GROUND ALTITUDE (<6.) [KM].
+!       ISEASN   TRUE FOR SPRING/SUMMER.
+      INTEGER IVIS
+      REAL VIS
+      DOUBLE PRECISION GNDALT
+      INTEGER ISEASN
+
+!     COMMONS:
+
+!     /PRFD/
+!       I_HGT   ALTITUDE GRID FOR AEROSOL PROFILE DATA [KM].
+!       HZ2K    0-3KM HAZE W/ 50, 23, 10, 5 & 2 KM VIS [550NM EXT/KM].
+!       FAWI50  2-11KM  FALL/WINTER  PROFILE W/ 50KM VIS [550NM EXT/KM].
+!       FAWI23  2-11KM  FALL/WINTER  PROFILE W/ 23KM VIS [550NM EXT/KM].
+!       SPSU50  2-11KM SPRING/SUMMER PROFILE W/ 50KM VIS [550NM EXT/KM].
+!       SPSU23  2-11KM SPRING/SUMMER PROFILE W/ 23KM VIS [550NM EXT/KM].
+!       BASTFW  10-35KM  FALL/WINTER  BACKGROUND [550NM EXT/KM].
+!       VUMOFW  10-35KM  FALL/WINTER  MODERATE VOLCANIC [550NM EXT/KM].
+!       HIVUFW  10-35KM  FALL/WINTER  HIGH VOLCANIC [550NM EXT/KM].
+!       EXVUFW  10-35KM  FALL/WINTER  EXTREME VOLCANIC [550NM EXT/KM].
+!       BASTSS  10-35KM SPRING/SUMMER BACKGROUND [550NM EXT/KM].
+!       UPNATM  >30KM NORMAL UPPER ATMOSPHERIC PROFILE [550NM EXT/KM].
+!       VUTONO  >30KM VOLCANIC TO NORMAL TRANSITION [550NM EXT/KM].
+      INTEGER I_HGT
+      REAL HZ2K,FAWI50,FAWI23,SPSU50,SPSU23,BASTFW,VUMOFW,HIVUFW,       &
+     &  EXVUFW,BASTSS,VUMOSS,HIVUSS,EXVUSS,UPNATM,VUTONO
+      COMMON/PRFD/I_HGT(34),HZ2K(3,5),FAWI50( 4:11),FAWI23( 4:11),      &
+     &    SPSU50( 4:11),SPSU23( 4:11),BASTFW(12:27),VUMOFW(12:27),      &
+     &    HIVUFW(12:27),EXVUFW(12:27),BASTSS(12:27),VUMOSS(12:27),      &
+     &    HIVUSS(12:27),EXVUSS(12:27),UPNATM(27:34),VUTONO(27:34)
+!      DATA FAWI50/                                                      &
+!     &  .011400,.006430,.004850,.003540,.002310,.001410,.000980,.000787/
+!      DATA FAWI23/                                                      &
+!     &  .027200,.012000,.004850,.003540,.002310,.001410,.000980,.000787/
+!      DATA SPSU50/                                                      &
+!     &  .014600,.010200,.009310,.007710,.006230,.003370,.001820,.001140/
+!      DATA SPSU23/                                                      &
+!     &  .034600,.018500,.009310,.007710,.006230,.003370,.001820,.001140/
+        
+!     LOCAL VARIABLES:
+!       IVISP1   IVIS PLUS 1.
+!       VISFAC   VISIBILITY INTERPOLATION FACTOR.
+!       DEN0     BOUNDARY LAYER AEROSOL DENSITY NOMINALLY AT 0KM [KM-1].
+!       DEN1     BOUNDARY LAYER AEROSOL DENSITY NOMINALLY AT 1KM [KM-1].
+!       DEN2     BOUNDARY LAYER AEROSOL DENSITY NOMINALLY AT 2KM [KM-1].
+!       DEN3     TROPOSPHERIC AEROSOL DENSITY NOMINALLY AT 3KM [KM-1].
+!       DEN4     TROPOSPHERIC AEROSOL DENSITY NOMINALLY AT 4KM [KM-1].
+!       DEN5     TROPOSPHERIC AEROSOL DENSITY NOMINALLY AT 5KM [KM-1].
+!       DEN6     TROPOSPHERIC AEROSOL DENSITY NOMINALLY AT 6KM [KM-1].
+      INTEGER IVISP1
+      REAL VISFAC,DEN0,DEN1,DEN2,DEN3,DEN4,DEN5,DEN6
+
+!     FUNCTIONS:
+!       DENLAY   RETURNS VERTICAL LAYER AVERAGE COLUMN AMOUNT.
+      REAL DENLAY
+
+!     DATA [ AEROSOL DENSITY = ( ANUMER / VIS - AOFFST ) / ADENOM ]:
+!       INUMER   AEROSOL DENSITY INTERPOLATION NUMERATOR [KM].
+!       IOFFST   AEROSOL DENSITY INTERPOLATION OFFSET.
+!       IDENOM   AEROSOL DENSITY INTERPOLATION DENOMINATION.
+      INTEGER INUMER(4),IOFFST(4),IDENOM(4)
+      DATA INUMER/1150,230,10,10/,IOFFST/23,10,1,2/,IDENOM/27,13,1,3/
+
+
+!     VISIBILITY INTERPOLATION FACTOR:
+      IVISP1=IVIS+1
+      VISFAC=(INUMER(IVIS)/VIS-IOFFST(IVIS))/IDENOM(IVIS)
+
+!     BOUNDARY LAYER AEROSOL DENSITIES:
+      DEN0=HZ2K(1,IVIS)+(HZ2K(1,IVISP1)-HZ2K(1,IVIS))*VISFAC
+      DEN1=HZ2K(2,IVIS)+(HZ2K(2,IVISP1)-HZ2K(2,IVIS))*VISFAC
+      DEN2=HZ2K(3,IVIS)+(HZ2K(3,IVISP1)-HZ2K(3,IVIS))*VISFAC
+
+!     BOUNDARY LAYER AEROSOL DENSITY INTEGRAL [KM-1]:
+      GTAOD6=DENLAY(DEN0,DEN1)+DENLAY(DEN1,DEN2)+DEN2/2
+
+!     TROPOSPHERIC AEROSOL DENSITIES:
+      IF(ISEASN.EQ.1)THEN
+
+!         SPRING/SUMMER:
+          IF(IVIS.EQ.1)THEN
+!             INTERPOLATE FOR ALTITUDES UP TO 4KM AND VISIBILITY > 23KM:
+              DEN3=SPSU50(4)+(SPSU23(4)-SPSU50(4))*VISFAC
+              DEN4=SPSU50(5)+(SPSU23(5)-SPSU50(5))*VISFAC
+          ELSE
+              DEN3=SPSU23(4)
+              DEN4=SPSU23(5)
+          ENDIF
+          DEN5=SPSU23(6)
+          DEN6=SPSU23(7)
+      ELSE
+
+!         FALL/WINTER
+          IF(IVIS.EQ.1)THEN
+
+!             INTERPOLATE FOR ALTITUDES UP TO 4KM AND VISIBILITY > 23KM:
+              DEN3=FAWI50(4)+(FAWI23(4)-FAWI50(4))*VISFAC
+              DEN4=FAWI50(5)+(FAWI23(5)-FAWI50(5))*VISFAC
+          ELSE
+              DEN3=FAWI23(4)
+              DEN4=FAWI23(5)
+          ENDIF
+          DEN5=FAWI23(6)
+          DEN6=FAWI23(7)
+      ENDIF
+!     GROUND TO 6KM VERTICAL AEROSOL OPTICAL DEPTH:
+      GTAOD6=SNGL(1-GNDALT/6)*(GTAOD6                                   &
+     &  +DEN3/2+DENLAY(DEN3,DEN4)+DENLAY(DEN4,DEN5)+DENLAY(DEN5,DEN6))
+
+      RETURN
+      END FUNCTION GTAOD6
+
+
+      REAL FUNCTION DENLAY(DENBOT,DENTOP)
+!______________________________________________________________________|
+!                                                                      |
+!     Copyright 2009 Spectral Sciences, Inc.                           |
+!                                                                      |
+!     Neither Spectral Sciences, Inc. nor its employees makes any      |
+!     warranty, express or implied, regarding the uses, accuracy,      |
+!     or completeness of this software.                                |
+!______________________________________________________________________|
+
+!     FUNCTION DENLAY RETURNS AN EXPONENTIALLY AVERAGED VERTICAL
+!     PATH LAYER DENSITY GIVEN ALTITUDE LEVEL DENSITY VALUES:
+!                          1
+!                        /                        X
+!     DENLAY  =  DENBOT  |    ( DENTOP / DENBOT )     DX
+!                        /
+!                          0
+!     THE MEAN VALUE IS RETURNED IF DENBOT OR DENTOP ARE NOT POSITIVE.
+      IMPLICIT NONE
+
+!     INPUT ARGUMENTS:
+!       DENBOT   BOTTOM ALTITUDE LEVEL DENSITY.
+!       DENTOP   TOP ALTITUDE LEVEL DENSITY.
+      REAL DENBOT,DENTOP
+
+!     LOCAL VARIABLES:
+!       DENRAT   RATIO OF DENTOP TO DENBOT.
+!       EPSILN   THE VARIATION OF DENRAT FROM ONE.
+      REAL DENRAT,EPSILN
+      IF(DENBOT.LE.0. .OR. DENTOP.LE.0.)THEN
+
+!         ARITHMETIC MEAN:
+          DENLAY=(DENBOT+DENTOP)/2
+      ELSE
+          DENRAT=DENTOP/DENBOT
+          EPSILN=DENRAT-1
+          IF(ABS(EPSILN).GT..01)THEN
+
+!             ANALYTIC EXPRESSION:
+              DENLAY=(DENTOP-DENBOT)/LOG(DENRAT)
+          ELSE
+
+!             TAYLOR EXPANSION:
+              DENLAY=DENBOT/(1+EPSILN*(.5+EPSILN*(.3333333+EPSILN/4)))
+          ENDIF
+      ENDIF
+      RETURN
+      END FUNCTION DENLAY
