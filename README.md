@@ -9,6 +9,6 @@
  - Reads CCCma output from the generated text file
  - saves as ptyhon pickle file
 ## Fortran
- - Includes all of CCCma code
+ - Includes all of CCCma code (in verll folder)
  - UA_main.F90 is the main script to read in/ give output
  - Written mainly by Jiangnan Li from the Canadian Climate Centre Modeling and Analysis
